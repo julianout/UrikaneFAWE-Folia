@@ -13,7 +13,6 @@ import com.sk89q.worldedit.world.block.BlockState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.world.level.Level;
@@ -62,7 +61,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
         this.level = level;
         // Use the actual tick as minecraft-defined so we don't try to force blocks into the world when the server's already lagging.
         //  - With the caveat that we don't want to have too many cached changed (1024) so we'd flush those at 1024 anyway.
-        this.lastTick = new AtomicInteger(MinecraftServer.currentTick);
+        this.lastTick = new AtomicInteger(currentTick());
     }
 
     private Level getLevel() {
@@ -98,7 +97,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
             LevelChunk levelChunk, BlockPos blockPos,
             net.minecraft.world.level.block.state.BlockState blockState
     ) {
-        int currentTick = MinecraftServer.currentTick;
+        int currentTick = currentTick();
         if (Fawe.isMainThread()) {
             return levelChunk.setBlockState(blockPos, blockState,
                     this.sideEffectSet.shouldApply(SideEffect.UPDATE) ? 0 : 512
@@ -107,7 +106,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
         // Since FAWE is.. Async we need to do it on the main thread (wooooo.. :( )
         cachedChanges.add(new CachedChange(levelChunk, blockPos, blockState));
         cachedChunksToSend.add(new IntPair(levelChunk.locX, levelChunk.locZ));
-        boolean nextTick = lastTick.get() > currentTick;
+        boolean nextTick = lastTick.get() != currentTick;
         if (nextTick || cachedChanges.size() >= 1024) {
             if (nextTick) {
                 lastTick.set(currentTick);
@@ -115,6 +114,11 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
             flushAsync(nextTick);
         }
         return blockState;
+    }
+
+    private int currentTick() {
+        long tick = Fawe.instance().getTimer().getTick();
+        return tick > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) tick;
     }
 
     @Override

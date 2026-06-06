@@ -11,6 +11,7 @@ import com.fastasyncworldedit.bukkit.regions.ResidenceFeature;
 import com.fastasyncworldedit.bukkit.regions.TownyFeature;
 import com.fastasyncworldedit.bukkit.regions.WorldGuardFeature;
 import com.fastasyncworldedit.bukkit.util.BukkitTaskManager;
+import com.fastasyncworldedit.bukkit.util.FoliaTaskManager;
 import com.fastasyncworldedit.bukkit.util.ItemUtil;
 import com.fastasyncworldedit.bukkit.util.image.BukkitImageViewer;
 import com.fastasyncworldedit.core.FAWEPlatformAdapterImpl;
@@ -21,6 +22,7 @@ import com.fastasyncworldedit.core.queue.implementation.QueueHandler;
 import com.fastasyncworldedit.core.queue.implementation.preloader.AsyncPreloader;
 import com.fastasyncworldedit.core.queue.implementation.preloader.Preloader;
 import com.fastasyncworldedit.core.regions.FaweMaskManager;
+import com.fastasyncworldedit.core.util.FoliaSupport;
 import com.fastasyncworldedit.core.util.TaskManager;
 import com.fastasyncworldedit.core.util.WEManager;
 import com.fastasyncworldedit.core.util.image.ImageViewer;
@@ -172,6 +174,9 @@ public class FaweBukkit implements IFawe, Listener {
      */
     @Override
     public TaskManager getTaskManager() {
+        if (FoliaSupport.isFolia()) {
+            return new FoliaTaskManager(plugin);
+        }
         return new BukkitTaskManager(plugin);
     }
 
@@ -273,6 +278,9 @@ public class FaweBukkit implements IFawe, Listener {
 
     @Override
     public Preloader getPreloader(boolean initialise) {
+        if (FoliaSupport.isFolia()) {
+            return null;
+        }
         if (PaperLib.isPaper()) {
             if (preloader == null && initialise) {
                 return preloader = new AsyncPreloader();

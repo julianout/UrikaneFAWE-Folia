@@ -3,6 +3,7 @@ package com.sk89q.worldedit.bukkit.adapter.impl.fawe.v1_21_11;
 import com.fastasyncworldedit.bukkit.adapter.AbstractBukkitGetBlocks;
 import com.fastasyncworldedit.bukkit.adapter.DelegateSemaphore;
 import com.fastasyncworldedit.bukkit.adapter.NativeEntityFunctionSet;
+import com.fastasyncworldedit.core.Fawe;
 import com.fastasyncworldedit.core.FaweCache;
 import com.fastasyncworldedit.core.configuration.Settings;
 import com.fastasyncworldedit.core.extent.processor.heightmap.HeightMapType;
@@ -11,6 +12,8 @@ import com.fastasyncworldedit.core.math.BitArrayUnstretched;
 import com.fastasyncworldedit.core.math.IntPair;
 import com.fastasyncworldedit.core.nbt.FaweCompoundTag;
 import com.fastasyncworldedit.core.queue.IChunkSet;
+import com.fastasyncworldedit.core.queue.implementation.QueueHandler;
+import com.fastasyncworldedit.core.util.FoliaSupport;
 import com.fastasyncworldedit.core.util.MathMan;
 import com.fastasyncworldedit.core.util.NbtUtils;
 import com.fastasyncworldedit.core.util.collection.AdaptedMap;
@@ -55,6 +58,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.storage.ValueInput;
 import org.apache.logging.log4j.Logger;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.block.CraftBlock;
@@ -78,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -760,8 +765,56 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
                     }
                 };
             }
-            return handleCallFinalizer(syncTasks, callback, finalizer);
+            return handleCallFinalizer(nmsWorld, syncTasks, callback, finalizer);
         }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private <T extends Future<T>> T handleCallFinalizer(
+            final ServerLevel nmsWorld,
+            final List<Runnable> syncTasks,
+            final Runnable callback,
+            final Runnable finalizer
+    ) throws Exception {
+        if (!FoliaSupport.isFolia() || syncTasks.isEmpty()) {
+            return super.handleCallFinalizer(syncTasks, callback, finalizer);
+        }
+
+        QueueHandler queueHandler = Fawe.instance().getQueueHandler();
+        Callable<Future<?>> chain = () -> {
+            try {
+                for (Runnable task : syncTasks) {
+                    if (task != null) {
+                        task.run();
+                    }
+                }
+                if (callback != null) {
+                    return queueHandler.async(callback, null);
+                } else if (finalizer != null) {
+                    return queueHandler.async(finalizer, null);
+                }
+                return null;
+            } catch (Throwable e) {
+                LOGGER.error("Error performing final chunk calling at {},{}", chunkX, chunkZ, e);
+                throw e;
+            }
+        };
+
+        CompletableFuture<Future<?>> result = new CompletableFuture<>();
+        Bukkit.getRegionScheduler().run(
+                WorldEditPlugin.getInstance(),
+                nmsWorld.getWorld(),
+                chunkX,
+                chunkZ,
+                ignored -> {
+                    try {
+                        result.complete(chain.call());
+                    } catch (Throwable e) {
+                        result.completeExceptionally(e);
+                    }
+                }
+        );
+        return (T) (Future) result;
     }
 
     private void updateGet(

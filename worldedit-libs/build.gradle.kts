@@ -1,3 +1,3 @@
 tasks.register("build") {
-    dependsOn(subprojects.map { it.tasks.named("build") })
+    dependsOn(subprojects.mapNotNull { it.tasks.findByName("build") })
 }

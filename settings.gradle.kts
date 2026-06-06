@@ -55,7 +55,13 @@ includeBuild("build-logic")
 
 include("worldedit-libs")
 
-listOf("1_21", "1_21_4", "1_21_5", "1_21_6", "1_21_9", "1_21_11", "26.1").forEach {
+val adapterVersions = gradle.startParameter.projectProperties["fawe.adapters"]
+    ?.split(",")
+    ?.map { it.trim() }
+    ?.filter { it.isNotEmpty() }
+    ?: listOf("1_21", "1_21_4", "1_21_5", "1_21_6", "1_21_9", "1_21_11", "26.1")
+
+adapterVersions.forEach {
     include("worldedit-bukkit:adapters:adapter-$it")
 }
 

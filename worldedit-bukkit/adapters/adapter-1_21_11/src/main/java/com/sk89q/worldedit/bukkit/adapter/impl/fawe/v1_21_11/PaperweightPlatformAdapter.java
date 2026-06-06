@@ -9,6 +9,7 @@ import com.fastasyncworldedit.core.Fawe;
 import com.fastasyncworldedit.core.FaweCache;
 import com.fastasyncworldedit.core.math.BitArrayUnstretched;
 import com.fastasyncworldedit.core.math.IntPair;
+import com.fastasyncworldedit.core.util.FoliaSupport;
 import com.fastasyncworldedit.core.util.MathMan;
 import com.fastasyncworldedit.core.util.TaskManager;
 import com.mojang.serialization.DataResult;
@@ -50,6 +51,7 @@ import net.minecraft.world.level.chunk.Strategy;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.entity.PersistentEntitySectionManager;
 import org.apache.logging.log4j.Logger;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.craftbukkit.CraftChunk;
 import org.enginehub.linbus.tree.LinCompoundTag;
@@ -326,9 +328,14 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
 
     private static void addTicket(ServerLevel serverLevel, int chunkX, int chunkZ) {
         // Ensure chunk is definitely loaded before applying a ticket
-        io.papermc.paper.util.MCUtil.MAIN_EXECUTOR.execute(() -> serverLevel
+        Runnable addChunkTicket = () -> serverLevel
                 .getChunkSource()
-                .addTicketWithRadius(ChunkHolderManager.UNLOAD_COOLDOWN, new ChunkPos(chunkX, chunkZ), 0));
+                .addTicketWithRadius(ChunkHolderManager.UNLOAD_COOLDOWN, new ChunkPos(chunkX, chunkZ), 0);
+        if (FoliaSupport.isFolia()) {
+            addChunkTicket.run();
+            return;
+        }
+        io.papermc.paper.util.MCUtil.MAIN_EXECUTOR.execute(addChunkTicket);
     }
 
     public static ChunkHolder getPlayerChunk(ServerLevel nmsWorld, final int chunkX, final int chunkZ) {
@@ -361,7 +368,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         if (lockHolder.chunkLock == null) {
             return;
         }
-        MinecraftServer.getServer().execute(() -> {
+        Runnable sendChunkPacket = () -> {
             try {
                 ChunkPos pos = levelChunk.getPos();
                 ClientboundLevelChunkWithLightPacket packet;
@@ -386,7 +393,18 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
             } finally {
                 NMSAdapter.endChunkPacketSend(nmsWorld.getWorld().getName(), pair, lockHolder);
             }
-        });
+        };
+        if (FoliaSupport.isFolia()) {
+            Bukkit.getRegionScheduler().run(
+                    WorldEditPlugin.getInstance(),
+                    nmsWorld.getWorld(),
+                    chunkX,
+                    chunkZ,
+                    ignored -> sendChunkPacket.run()
+            );
+            return;
+        }
+        MinecraftServer.getServer().execute(sendChunkPacket);
     }
 
     private static List<ServerPlayer> nearbyPlayers(ServerLevel serverLevel, ChunkPos coordIntPair) {

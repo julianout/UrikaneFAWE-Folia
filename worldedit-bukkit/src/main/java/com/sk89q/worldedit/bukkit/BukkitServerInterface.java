@@ -24,6 +24,7 @@ import com.fastasyncworldedit.core.configuration.Settings;
 import com.fastasyncworldedit.core.extent.processor.PlacementStateProcessor;
 import com.fastasyncworldedit.core.extent.processor.lighting.RelighterFactory;
 import com.fastasyncworldedit.core.queue.IBatchProcessor;
+import com.fastasyncworldedit.core.util.FoliaSupport;
 import com.google.common.collect.Sets;
 import com.sk89q.bukkit.util.CommandInfo;
 import com.sk89q.bukkit.util.CommandRegistration;
@@ -135,6 +136,15 @@ public class BukkitServerInterface extends AbstractPlatform implements MultiUser
 
     @Override
     public int schedule(long delay, long period, Runnable task) {
+        if (FoliaSupport.isFolia()) {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(
+                    plugin,
+                    scheduledTask -> task.run(),
+                    Math.max(1L, delay),
+                    Math.max(1L, period)
+            );
+            return -1;
+        }
         return Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, task, delay, period);
     }
 
